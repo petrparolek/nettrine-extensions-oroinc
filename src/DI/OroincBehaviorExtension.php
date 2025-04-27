@@ -2,18 +2,14 @@
 
 namespace Nettrine\Extensions\Oroinc\DI;
 
-use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Types\Type;
-use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Configuration;
 use Nette\DI\CompilerExtension;
 use Nette\DI\Definitions\ServiceDefinition;
 use Nette\PhpGenerator\ClassType;
 use Nette\Schema\Expect;
 use Nette\Schema\Schema;
-use Oro\DBAL\Types\ArrayType;
 use Oro\DBAL\Types\MoneyType;
-use Oro\DBAL\Types\ObjectType;
 use Oro\DBAL\Types\PercentType;
 use Oro\ORM\Query\AST\Functions\Cast;
 use Oro\ORM\Query\AST\Functions\DateTime\ConvertTz;
@@ -34,14 +30,6 @@ use stdClass;
 final class OroincBehaviorExtension extends CompilerExtension
 {
 
-	private const OVERRIDING_TYPES = [
-		Types::JSON => [
-			ArrayType::class,
-			ObjectType::class,
-			'string',
-		],
-	];
-
 	private const NEW_TYPES = [
 		MoneyType::TYPE => [
 			MoneyType::class,
@@ -56,55 +44,41 @@ final class OroincBehaviorExtension extends CompilerExtension
 	public function getConfigSchema(): Schema
 	{
 		return Expect::structure([
-			'driver' => Expect::anyOf(
-				'mysql',
-				'mysql2',
-				'pdo_mysql', // mysql
-				'pgsql',
-				'postgres',
-				'postgresql',
-				'pdo_pgsql' // postgre
-			),
-		]);
+			'connections' => Expect::arrayOf(
+				Expect::structure([
+					'driver' => Expect::anyOf(
+						'mysql',
+						'mysql2',
+						'pdo_mysql', // mysql
+						'pgsql',
+						'postgres',
+						'postgresql',
+						'pdo_pgsql' // postgre
+					),
+				])
+			)->min(1)->required()]);
 	}
 
 	public function beforeCompile(): void
 	{
 		$builder = $this->getContainerBuilder();
-		$config = $this->config;
+		$connectionsConfig = $this->config->connections;
 
-		if ($config->driver !== null) {
-			$configurationDefinition = $builder->getDefinitionByType(Configuration::class);
+		foreach ($connectionsConfig as $connection => $config) {
+			if ($config->driver === null) {
+				return;
+			}
+
+			$configurationDefinition = $builder->findByType(Configuration::class)['nettrine.orm.managers.' . $connection . '.configuration'];
 			assert($configurationDefinition instanceof ServiceDefinition);
 
 			$this->registerCrossPlatformFunctions($configurationDefinition);
-		}
-
-		foreach ($builder->findByType(Connection::class) as $connectionDefinition) {
-			assert($connectionDefinition instanceof ServiceDefinition);
-
-			foreach (self::OVERRIDING_TYPES + self::NEW_TYPES as $name => [$className, $dbType]) {
-				$connectionDefinition->addSetup('?->getDatabasePlatform()->registerDoctrineTypeMapping(?, ?)', [
-					'@self',
-					$dbType,
-					$name,
-				]);
-			}
 		}
 	}
 
 	public function afterCompile(ClassType $class): void
 	{
 		$initialize = $class->getMethod('initialize');
-
-		foreach (self::OVERRIDING_TYPES as $name => [$className, $dbType]) {
-			$initialize->addBody(sprintf(
-				'%s::overrideType(\'%s\', \'%s\');',
-				Type::class,
-				$name,
-				$className
-			));
-		}
 
 		foreach (self::NEW_TYPES as $name => [$className, $dbType]) {
 			$initialize->addBody(sprintf(

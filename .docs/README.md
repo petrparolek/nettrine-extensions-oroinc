@@ -28,9 +28,11 @@ Specify the same driver as for the Doctrine DBAL connection, all of [Oroinc/Doct
 
 ```yaml
 nettrine.extensions.oroinc:
-    driver: mysql
-    # mysql - 'mysql', 'mysql2', 'pdo_mysql'
-    # postgre - 'pgsql', 'postgres', 'postgresql', 'pdo_pgsql'
+    connections:
+        default:
+            driver: mysql
+            # mysql - 'mysql', 'mysql2', 'pdo_mysql'
+            # postgre - 'pgsql', 'postgres', 'postgresql', 'pdo_pgsql'
 ```
 
 [Field types](https://github.com/oroinc/doctrine-extensions#field-types) `MoneyType`, `PercentType`, `ObjectType` and `ArrayType` are always registered to your `Connection`.
